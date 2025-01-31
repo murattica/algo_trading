@@ -1,119 +1,128 @@
-# Binance dbt Library Documentation
+# Algo Trading Framework
 
-This document provides an overview and instructions for setting up and utilizing the **Binance dbt Library** for your project.
+This is an **algorithmic trading framework** that integrates **Reinforcement Learning (RL)** for algorithmic trading strategies, along with **Airflow for automation** and **dbt for data modeling**. This project is currently **under development**.
 
 ---
 
-## Overview
+## Core Components
 
-The Binance dbt library contains SQL models, macros, and configurations to enable data transformations and feature engineering for algorithmic trading. The models support creating technical indicators like RSI, Bollinger Bands, and Ichimoku Clouds, along with preparing historical state data for backtesting and machine learning workflows.
+### 1. **SequentialTradingEnv** (Custom RL Environment)
+The `SequentialTradingEnv` is a custom multi-agent trading environment built using `PettingZoo`. It provides:
 
-### Structure:
-```
-.
-├── models/
-│   ├── signals/
-│   │   ├── bolinger.sql
-│   │   ├── ichimoku.sql
-│   │   ├── rsi.sql
-│   │   └── state_history.sql
-│   └── sources.yml
-├── seeds/
-├── snapshots/
-├── target/
-├── tests/
-└── dbt_project.yml
-```
+- **Agents**: Each trading pair is represented as a specialist agent, with a meta-agent for overall portfolio management.
+- **Features**: Includes normalized historical market data and portfolio state.
+- **Actions**: Agents make allocation and risk-management decisions.
+- **Rewards**: Combines returns and risk-adjusted metrics for each agent.
+
+The environment enables training reinforcement learning models for multi-asset portfolio optimization and risk management.
+
+### 2. **Reinforcement Learning Models**
+- **Custom RL Module**: Implements a feedforward neural network using PyTorch for policy generation.
+- **Training Framework**: Uses `Ray RLlib` for scalable multi-agent training.
+- **Policy Mapping**: Unique policies for each agent and the meta-agent to specialize their decision-making.
+- **Training Script** (`Train.py`): Trains the RL agents using PPO (Proximal Policy Optimization).
+
+### 3. **Airflow Automation**
+Airflow is used to automate data ingestion and preprocessing tasks:
+- **Data Fetching**: Fetches OHLCV market data for selected trading pairs.
+- **DAGs**: Orchestrates periodic data updates and backfills.
+
+### 4. **Data Layer**
+- **Database**: PostgreSQL database to store historical market data.
+- **Data Fetching** (`fetch_data.py`): Uses `ccxt` to pull OHLCV data from Binance.
+- **dbt**: Supports data transformations and feature engineering (e.g., RSI, Bollinger Bands).
 
 ---
 
 ## Setup Instructions
 
-### 1. Install dbt
-Ensure dbt and the required adapter for your database are installed:
+### 1. Install Dependencies
+Ensure you have Python installed. Install the required dependencies:
 
 ```bash
-pip install dbt-core dbt-postgres
+pip install -r requirements.txt
 ```
 
-### 2. Configure dbt Profiles
-Create a `profiles.yml` file under `~/.dbt/` with the following configuration:
+### 2. Configure Database
+Set up a PostgreSQL database and ensure the credentials are stored in a secure location (e.g., using `keyring`).
 
-```yaml
-default:
-  outputs:
-    dev:
-      type: postgres
-      host: localhost
-      user: your_db_user
-      password: your_db_password
-      port: 5432
-      dbname: binance
-      schema: public
-      threads: 4
-  target: dev
+- Example database initialization script:
+```sql
+CREATE DATABASE binance;
+CREATE TABLE ticker_data (
+    symbol TEXT,
+    timestamp BIGINT,
+    date DATE,
+    hour INT,
+    min INT,
+    open REAL,
+    high REAL,
+    low REAL,
+    close REAL,
+    volume_crypto REAL,
+    volume_usd REAL,
+    PRIMARY KEY (symbol, timestamp)
+);
 ```
 
-### 3. Initialize the dbt Project
-Navigate to the `binance` directory and run:
+### 3. Setting Up Airflow
+
+#### Initialize Airflow
+```bash
+export AIRFLOW_HOME=$(pwd)/airflow_home
+airflow db init
+```
+
+#### Start Airflow
+```bash
+airflow webserver -p 8080 &
+airflow scheduler &
+```
+Visit `http://localhost:8080` to access the Airflow UI.
+
+### 4. Training the RL Model
+Run the training script:
 
 ```bash
-dbt init binance
+python Train.py
 ```
 
-This will set up the project structure and configuration.
+This will initialize the custom environment and start training the RL agents. Training configurations (e.g., learning rate, policy networks) can be modified in the script.
 
-### 4. Run Models
-Run the models to generate outputs in your database:
+---
 
-```bash
-dbt run
+## Project Structure
+
 ```
-
-### 5. Test and Debug
-Test the integrity of your models:
-
-```bash
-dbt test
-```
-
-If you encounter issues, use:
-
-```bash
-dbt debug
+.
+├── airflow_home/              # Airflow DAGs and configuration
+├── db.py                      # Database connection and query management
+├── fetch_data.py              # Fetches historical market data from Binance
+├── data_fetch_job.py          # Airflow job for fetching market data
+├── portfolio.py               # Portfolio management logic
+├── SequentialTradingEnv.py    # Custom RL trading environment
+├── Train.py                   # RL training script using Ray RLlib
+├── custom_rl_module.py        # Custom reinforcement learning model
+├── performance.py             # Evaluation of trained RL models
+├── requirements.txt           # Python dependencies
+└── README.md                  # Project documentation
 ```
 
 ---
 
-## Key Components
+## Key Features
 
-### Models
-
-1. **`bolinger.sql`**
-   - Generates Bollinger Bands for specified trading pairs.
-
-2. **`ichimoku.sql`**
-   - Computes Ichimoku Cloud indicators for trend analysis.
-
-3. **`rsi.sql`**
-   - Calculates the Relative Strength Index (RSI) to identify overbought/oversold conditions.
-
-4. **`state_history.sql`**
-   - Prepares historical state data for analysis and modeling.
-
-### Sources
-Defined in `sources.yml` to map raw data inputs for transformations.
-
-### Snapshots
-Maintain historical records of critical data transformations over time.
+- **Multi-Agent RL**: Train and evaluate specialized agents for each trading pair and a meta-agent for portfolio management.
+- **Customizable Environment**: Fully parameterized for different market conditions and trading strategies.
+- **Airflow Automation**: Automates data ingestion and preprocessing tasks.
+- **Modular Design**: Easily extendable for new trading pairs, RL models, and data pipelines.
 
 ---
 
 ## Notes
-
-- Ensure your database credentials are correctly configured in the `profiles.yml` file.
-- For additional customization, modify the SQL models under the `models/signals` directory.
-- Contributions and suggestions for improvement are welcome.
+- The project is **under development**.
+- Ensure database credentials are securely managed.
+- Contributions and feedback are welcome.
 
 ---
 

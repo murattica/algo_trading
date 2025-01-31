@@ -1,0 +1,7 @@
+version: 2
+sources:
+  - name: public
+    description: binance
+    schema: public  # Ensure this matches the schema in your database
+    tables:
+      - name: ticker_data

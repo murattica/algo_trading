@@ -1,0 +1,5 @@
+__pycache__/
+ppo_trading_logs/
+mappo_trading_model/
+logs/
+.env

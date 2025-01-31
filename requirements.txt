@@ -1,0 +1,12 @@
+airflow==2.7.2
+dbt==1.6.0
+gymnasium==1.0.0
+matplotlib==3.9.4
+numpy==2.0.2
+pandas==2.2.3
+pettingzoo==1.24.3
+psycopg2==2.9.10
+ray==2.41.0
+scipy==1.13.1
+seaborn==0.13.2
+torch==2.6.0

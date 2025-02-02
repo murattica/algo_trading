@@ -1,62 +1,154 @@
+from datetime import datetime
+import json
+from db import insert_query
+from Position import Position 
+
 class Portfolio:
-    def __init__(self, initial_budget=100000):
-        self.budget = initial_budget  # Cash available for trading
-        self.positions = {}  # Open positions: {pair_name: {amount, direction, entry_price}}
-        self.history = []  # Track portfolio value over time
+    def __init__(self, initial_cash):
+        """
+        Initialize a portfolio with a starting cash balance.
+        """
+        self.cash_reserve = initial_cash  # Start with all cash
+        self.positions = {}  # Dictionary to store active `Position` objects
 
-    def reset(self):
-        self.budget = 100000
-        self.positions = {}
-        self.history = []
+    def open_position(self, pair, entry_price, direction, size, timestamp, agent):
+        """
+        Open a new position if enough cash is available.
+        Logs action in the database.
+        """
+        if self.cash_reserve < size:
+            print(f"Not enough cash to open position on {pair}")
+            return False
 
-    def open_position(self, pair_name, amount, direction, entry_price):
-        if amount > self.budget:
-            raise ValueError("Not enough budget to open the position")
-        self.budget -= amount
-        if pair_name not in self.positions:
-            self.positions[pair_name] = {"amount": 0, "direction": direction, "entry_price": entry_price}
-        self.positions[pair_name]["amount"] += amount
+        if pair in self.positions and self.positions[pair].status == "open":
+            print(f"Position already open on {pair}, use modify_position() instead")
+            return False
 
-    def close_position(self, pair_name, exit_price, adjustment=None):
-        if pair_name not in self.positions:
-            raise ValueError(f"No open position for {pair_name}")
+        # Deduct from cash reserve
+        self.cash_reserve -= size
 
-        position = self.positions[pair_name]
-        close_amount = adjustment if adjustment else position["amount"]
-        profit = 0
+        # Create and store a Position object
+        position = Position(pair, entry_price, direction, timestamp, size, agent)
+        self.positions[pair] = position
 
-        if position["direction"] == "long":
-            profit = close_amount * (exit_price / position["entry_price"] - 1)
-        elif position["direction"] == "short":
-            profit = close_amount * (position["entry_price"] / exit_price - 1)
+        # Log the action in the database
+        self.log_action(position.id, timestamp, agent, pair, direction, "open", size, {"entry_point": entry_price})
 
-        self.budget += close_amount + profit
-        position["amount"] -= close_amount
+        return True
 
-        if position["amount"] <= 0:
-            del self.positions[pair_name]
+    def modify_position(self, pair, action, size, new_price, timestamp):
+        """
+        Modify an existing position by increasing, decreasing, or closing it.
+        Logs every action in the database.
+        """
+        if pair not in self.positions or self.positions[pair].status == "closed":
+            print(f"No open position on {pair} to modify")
+            return False
 
-        return profit
+        position = self.positions[pair]
 
-    def get_allocation(self, pair_name):
-        """Calculate the current allocation percentage for a pair."""
-        if pair_name in self.positions:
-            total_allocated = sum(pos["amount"] for pos in self.positions.values())
-            return self.positions[pair_name]["amount"] / total_allocated
-        return 0.0
+        if action == "increase":
+            if self.cash_reserve < size:
+                print(f"Not enough cash to increase position on {pair}")
+                return False
+            position.update_position("increase", size, new_price, timestamp)
+            self.cash_reserve -= size  # Deduct from cash
+            self.log_action(position.id, timestamp, position.agent, pair, position.direction, "increase", size, {
+                "old_size": position.size - size,
+                "entry_point": new_price
+            })
 
-    def total_value(self):
-        total = self.budget
-        for pair_name, position in self.positions.items():
-            current_price = trading_pairs[pair_name].price
-            if position["direction"] == "long":
-                total += position["amount"] * (current_price / position["entry_price"])
-            elif position["direction"] == "short":
-                total += position["amount"] * (position["entry_price"] / current_price)
-        return total
+        elif action == "decrease":
+            position.update_position("decrease", size, new_price, timestamp)
+            self.cash_reserve += size  # Return cash from reduced position
+            self.log_action(position.id, timestamp, position.agent, pair, position.direction, "decrease", size, {
+                "old_size": position.size + size,
+                "entry_point": new_price
+            })
 
-# The following block will only execute when this file is run directly
-if __name__ == "__main__":
-    # Test the Portfolio class
-    portfolio = Portfolio(initial_budget=50000)
-    print(f"Testing Portfolio: {portfolio}")
+        elif action == "close":
+            position.update_position("close", size, new_price, timestamp)
+            self.cash_reserve += position.size  # Return full position size to cash
+
+            # Log closing position
+            self.log_action(position.id, timestamp, position.agent, pair, position.direction, "close", position.size, {
+                "avg_entry_point": position.get_avg_entry_price(),
+                "exit_point": new_price,
+                "pnl": position.pnl
+            })
+
+            # Remove closed position from portfolio
+            del self.positions[pair]
+
+        return True
+
+    def calculate_total_pnl(self, market_prices):
+        """
+        Calculate the total portfolio value (cash + PnL of open positions).
+        """
+        total_pnl = sum(
+            position.calculate_pnl(market_prices[pair])
+            for pair, position in self.positions.items()
+            if position.status == "open"
+        )
+        return total_pnl
+
+    def get_portfolio_value(self, market_prices):
+        """
+        Return the total portfolio value (cash + unrealized PnL).
+        """
+        return self.cash_reserve + self.calculate_total_pnl(market_prices)
+
+    def get_open_position_pnls(self, market_prices):
+        """
+        Returns a dictionary of open position PnLs.
+        """
+        return {
+            pair: position.calculate_pnl(market_prices[pair])
+            for pair, position in self.positions.items()
+            if position.status == "open"
+        }
+
+    def print_portfolio(self, market_prices):
+        """
+        Print portfolio summary.
+        """
+        total_value = self.get_portfolio_value(market_prices)
+        position_pnls = self.get_open_position_pnls(market_prices)
+
+        print(f"Cash Reserve: {self.cash_reserve:.2f}")
+        print(f"Portfolio PnL: {self.calculate_total_pnl(market_prices):.2f}")
+        print(f"Portfolio Value: {total_value:.2f}")
+        print("\nOpen Positions PnLs:")
+        for pair, pnl in position_pnls.items():
+            print(f"   {pair}: {pnl:.2f}")
+
+        print("\nOpen Positions:")
+        for pair, position in self.positions.items():
+            if position.status == "open":
+                print(f"   {pair} | Size: {position.size:.2f} | PnL: {position.pnl:.2f}")
+                print(f"   Entry Points: {position.entry_points}")
+
+    def log_action(self, position_id, step_number, agent, pair, direction, action, size, properties):
+        """
+        Logs the action to the `order_history` table using `insert_query()`.
+        """
+        query = """
+        INSERT INTO order_history (position_id, step_number, timestamp, agent, pair, direction, action, size, properties)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s);
+        """
+        values = (
+            position_id,
+            step_number,
+            datetime.utcnow(),
+            agent,
+            pair,
+            direction,
+            action,
+            size,
+            json.dumps(properties)  # Convert dictionary to JSON
+        )
+
+        success = insert_query(query, values)
+        if not success:
+            print(f"Failed to log action {action} for {pair}")

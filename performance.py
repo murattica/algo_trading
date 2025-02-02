@@ -8,23 +8,24 @@ from ray.tune.registry import register_env
 from ray.rllib.env import ParallelPettingZooEnv
 
 from db import prepare_numpy_array, fetch_state_history
-from MultiAgentTradingEnv1 import MultiAgentTradingEnv
+from SequentialTradingEnv import SequentialTradingEnv
 
 # Ensure Ray is properly initialized
 ray.shutdown()
 ray.init(ignore_reinit_error=True)
 
-#  Load Market Data
 trading_pairs = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'ADA/USDT']
 raw_data = fetch_state_history(trading_pairs)
 market_data, time_index_map, symbol_index_map = prepare_numpy_array(raw_data, num_pairs=len(trading_pairs))
 
-#  Define Environment Creator Function
-def env_creator(_):
-    return ParallelPettingZooEnv(MultiAgentTradingEnv(market_data=market_data,budget = 100, risk_free_rate=0.001, render_mode="human"))
+def env_creator(config):
+    return PettingZooEnv(SequentialTradingEnv(
+        market_data=config.get("market_data", market_data),
+        budget=config.get("budget", 100),
+        risk_free_rate=config.get("risk_free_rate", 0.001)
+    ))
 
-#  Register the environment
-register_env("MultiAgentTradingEnv", lambda config: env_creator(config))
+register_env("SequentialTradingEnv", env_creator)
 
 # Load Trained Model
 model_path = os.path.abspath("mappo_trading_model")

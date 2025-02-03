@@ -35,7 +35,7 @@ This project is focused on building an advanced **algorithmic trading framework*
 - **Data Fetching** (`fetch_data.py`): Uses `ccxt` to pull OHLCV data from Binance.
 - **dbt**: Supports data transformations and feature engineering (e.g., RSI, Bollinger Bands).
 
-### Airflow Automatio#
+### Airflow Automation
 Airflow is used to automate data ingestion and preprocessing tasks:
 - **Data Fetching**: Fetches binance OHLCV market data for selected trading pairs.
 - **DAGs**: Orchestrates periodic data updates and backfills.

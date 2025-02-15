@@ -64,10 +64,14 @@ def get_query(query):
         print(f"Error executing query: {e}")
         return None
 
+import keyring
+import psycopg2
+
 def insert_query(query, values):
     """
     Executes an INSERT query in PostgreSQL.
     Uses keyring for credentials.
+    Prints the executed query for debugging.
     """
     username = keyring.get_password('postgres', 'username')
     password = keyring.get_password('postgres', 'password')
@@ -81,12 +85,17 @@ def insert_query(query, values):
             port="5432"
         ) as conn:
             with conn.cursor() as cursor:
+                # Print query and values for debugging
+                formatted_query = cursor.mogrify(query, values).decode('utf-8')
+                print(f"Executing Query:\n{formatted_query}\n")
+
                 cursor.execute(query, values)
                 conn.commit()  # Commit the transaction
                 return True
     except Exception as e:
         print(f"Error executing insert query: {e}")
         return False
+
 
 def get_latest_timestamp(symbol, conn):
     cursor = conn.cursor()

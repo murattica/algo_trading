@@ -3,3 +3,6 @@ ppo_trading_logs/
 mappo_trading_model/
 logs/
 .env
+saved_models/
+Install Cursor.app/
+.DS_Store
